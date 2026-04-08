@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SEARCH AND DESTROY // TERMINAL</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#04040a;
+  --bg2:#08080f;
+  --bg3:#0c0c16;
+  --green:#00ff88;
+  --green-dim:#006633;
+  --red:#ff2020;
+  --red-dim:#660000;
+  --amber:#ffaa00;
+  --amber-dim:#664400;
+  --cyan:#00ccff;
+  --text:#b8d8c0;
+  --text-dim:#2a4a2a;
+  --border:rgba(0,255,136,0.1);
+  --border-hot:rgba(0,255,136,0.45);
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;overflow-x:hidden;cursor:crosshair}
+body::before{content:'';position:fixed;inset:0;z-index:600;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,transparent 0px,transparent 2px,rgba(0,0,0,0.22) 2px,rgba(0,0,0,0.22) 3px)}
+body::after{content:'';position:fixed;inset:0;z-index:599;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 35%,rgba(0,0,0,0.82) 100%)}
+
+#bgCanvas{position:fixed;inset:0;z-index:0;opacity:0.55;pointer-events:none}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spinR{to{transform:rotate(-360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes gPulse{0%,100%{box-shadow:0 0 6px var(--green)}50%{box-shadow:0 0 26px var(--green),0 0 50px rgba(0,255,136,.45)}}
+@keyframes rPulse{0%,100%{box-shadow:0 0 6px var(--red)}50%{box-shadow:0 0 30px var(--red),0 0 70px rgba(255,32,32,.55)}}
+@keyframes aPulse{0%,100%{box-shadow:0 0 6px var(--amber)}50%{box-shadow:0 0 24px var(--amber),0 0 50px rgba(255,170,0,.45)}}
+@keyframes scanMove{0%{top:-6px}100%{top:100%}}
+@keyframes bootLoad{0%{width:0}100%{width:100%}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+@keyframes slideRight{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+@keyframes hazardScroll{from{background-position:0 0}to{background-position:56px 0}}
+@keyframes countBlink{
+  0%,100%{color:var(--red);text-shadow:0 0 22px var(--red),0 0 55px rgba(255,32,32,.65)}
+  50%{color:#ff7777;text-shadow:none}}
+@keyframes greenGlow{
+  0%,100%{color:var(--green);text-shadow:0 0 22px var(--green),0 0 50px rgba(0,255,136,.5)}
+  50%{color:#aaffcc;text-shadow:0 0 8px var(--green)}}
+@keyframes shakeX{
+  0%,100%{transform:translate(0,0)}15%{transform:translate(-7px,3px)}
+  30%{transform:translate(7px,-3px)}45%{transform:translate(-5px,4px)}
+  60%{transform:translate(5px,-2px)}75%{transform:translate(-3px,3px)}90%{transform:translate(3px,0)}}
+@keyframes explFlash{
+  0%{background:rgba(255,100,0,0)}8%{background:rgba(255,200,0,.9)}
+  20%{background:rgba(255,80,0,.65)}50%{background:rgba(255,20,0,.3)}100%{background:rgba(0,0,0,0)}}
+@keyframes defFlash{
+  0%{background:rgba(0,255,136,0)}12%{background:rgba(0,255,136,.4)}100%{background:rgba(0,255,136,0)}}
+@keyframes popIn{0%{transform:scale(.5);opacity:0}65%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+@keyframes radarSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes sweepBar{
+  0%{width:0;margin-left:0}50%{width:60%;margin-left:40%}100%{width:0;margin-left:100%}}
+@keyframes ripple{0%{transform:scale(.4);opacity:1}100%{transform:scale(3.5);opacity:0}}
+@keyframes modalShake{
+  0%,100%{transform:scale(1) translate(0,0)}
+  15%{transform:scale(1.01) translate(-3px,1px)}
+  30%{transform:scale(1.01) translate(3px,-1px)}
+  50%{transform:scale(1) translate(-2px,1px)}
+  70%{transform:scale(1) translate(2px,0)}}
+
+/* BOOT */
+#boot{position:fixed;inset:0;z-index:999;background:#000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  transition:opacity .8s ease}
+#boot.gone{opacity:0;pointer-events:none}
+.boot-logo{font-family:'Orbitron',sans-serif;font-size:clamp(22px,5vw,46px);font-weight:900;
+  letter-spacing:10px;color:var(--green);text-shadow:0 0 30px var(--green)}
+.boot-logo span{color:var(--red);text-shadow:0 0 22px var(--red)}
+.boot-sub{font-size:10px;letter-spacing:6px;color:#224422}
+.boot-bar-wrap{width:300px;height:3px;background:#0a0a0a;border:1px solid #1a1a1a}
+.boot-bar-fill{height:100%;width:0;background:var(--green);box-shadow:0 0 10px var(--green);animation:bootLoad 2.2s cubic-bezier(.4,0,.2,1) forwards}
+.boot-log{font-size:10px;letter-spacing:2px;color:#224422;height:14px}
+.boot-warn{font-size:10px;letter-spacing:3px;color:var(--red);animation:blink .6s step-end infinite}
+
+/* FLASH */
+#flash{position:fixed;inset:0;z-index:700;pointer-events:none;opacity:0}
+#flash.expl{animation:explFlash 1.4s ease forwards}
+#flash.def{animation:defFlash 1.1s ease forwards}
+
+#pCanvas{position:fixed;inset:0;z-index:690;pointer-events:none}
+
+/* MODALS */
+.modal-bg{position:fixed;inset:0;z-index:800;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.82);backdrop-filter:blur(5px);
+  opacity:0;pointer-events:none;transition:opacity .3s}
+.modal-bg.show{opacity:1;pointer-events:all}
+.mbox{padding:40px 50px;text-align:center;max-width:500px;width:90%;
+  position:relative;overflow:hidden;border:2px solid;animation:popIn .4s ease both}
+.mbox::before{content:'';position:absolute;top:0;left:0;right:0;height:4px}
+#mExpl .mbox{border-color:var(--red);background:rgba(10,0,0,.95);
+  box-shadow:0 0 70px rgba(255,32,32,.45),0 0 140px rgba(255,32,32,.15);
+  animation:popIn .4s ease both, modalShake 0.5s ease .4s}
+#mExpl .mbox::before{background:var(--red)}
+.m-icon-expl{font-size:76px;line-height:1;margin-bottom:14px;animation:pulse .4s step-end infinite}
+.m-title-expl{font-family:'Orbitron',sans-serif;font-size:clamp(18px,4vw,30px);font-weight:900;
+  letter-spacing:6px;color:var(--red);text-transform:uppercase;
+  text-shadow:0 0 22px var(--red),0 0 55px rgba(255,32,32,.5);
+  animation:blink .45s step-end infinite;margin-bottom:8px}
+.m-sub-expl{font-size:11px;letter-spacing:4px;color:#dd5555;margin-bottom:26px;line-height:1.8}
+#mDef .mbox{border-color:var(--green);background:rgba(0,8,4,.96);
+  box-shadow:0 0 60px rgba(0,255,136,.3),0 0 120px rgba(0,255,136,.1)}
+#mDef .mbox::before{background:var(--green)}
+.m-icon-def{font-size:70px;line-height:1;margin-bottom:14px;animation:greenGlow 1.4s ease-in-out infinite}
+.m-title-def{font-family:'Orbitron',sans-serif;font-size:clamp(16px,3.5vw,26px);font-weight:900;
+  letter-spacing:5px;color:var(--green);text-shadow:0 0 22px var(--green);
+  margin-bottom:8px;text-transform:uppercase}
+.m-sub-def{font-size:11px;letter-spacing:3px;color:var(--green-dim);margin-bottom:26px;line-height:1.8}
+.mbtn{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:3px;padding:12px 34px;
+  border:2px solid;cursor:pointer;background:transparent;text-transform:uppercase;transition:all .2s}
+.mbtn.r{color:var(--red);border-color:var(--red)}
+.mbtn.r:hover{background:rgba(255,32,32,.15);box-shadow:0 0 22px rgba(255,32,32,.4)}
+.mbtn.g{color:var(--green);border-color:var(--green)}
+.mbtn.g:hover{background:rgba(0,255,136,.1);box-shadow:0 0 22px rgba(0,255,136,.35)}
+.ripple-ring{position:absolute;border-radius:50%;border:2px solid;
+  width:100px;height:100px;top:50%;left:50%;margin:-50px 0 0 -50px;
+  pointer-events:none;animation:ripple 1.5s ease-out infinite}
+.ripple-ring:nth-child(2){animation-delay:.5s}
+.ripple-ring:nth-child(3){animation-delay:1s}
+.ripple-ring.r{border-color:var(--red);opacity:.4}
+.ripple-ring.g{border-color:var(--green);opacity:.35}
+
+/* HAZARD BARS */
+.hz-bar{width:100%;height:10px;
+  background:repeating-linear-gradient(90deg,var(--amber) 0px,var(--amber) 14px,#000 14px,#000 28px);
+  animation:hazardScroll .8s linear infinite;opacity:.65;position:relative;z-index:10}
+
+/* TOPBAR */
+.topbar{width:100%;background:rgba(8,8,15,.95);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;height:54px;position:relative;overflow:hidden;z-index:10}
+.scan-line{position:absolute;top:-6px;left:0;width:100%;height:5px;
+  background:linear-gradient(to bottom,rgba(0,255,136,.7),transparent);
+  animation:scanMove 5s linear infinite}
+.topbar-l{display:flex;align-items:center;gap:14px;z-index:1}
+.badge{font-family:'Orbitron',sans-serif;font-size:12px;font-weight:700;letter-spacing:4px;
+  color:var(--green);border:2px solid var(--green);padding:4px 14px;
+  box-shadow:0 0 14px rgba(0,255,136,.3);text-transform:uppercase}
+.brand{font-family:'Rajdhani',sans-serif;font-size:13px;letter-spacing:3px;
+  color:var(--text-dim);text-transform:uppercase}
+.topbar-r{display:flex;align-items:center;gap:16px;z-index:1}
+.t-dot{width:10px;height:10px;border-radius:50%;background:var(--green);animation:gPulse 1.5s ease-in-out infinite}
+.t-dot.armed{background:var(--red);animation:rPulse .5s ease-in-out infinite}
+.clk{font-family:'Orbitron',sans-serif;font-size:13px;letter-spacing:2px;color:var(--amber)}
+.sig-bars{display:flex;align-items:flex-end;gap:3px;height:22px}
+.sbar{width:6px;background:#112211;border-radius:1px;transition:background .4s,box-shadow .4s}
+.sbar:nth-child(1){height:30%}.sbar:nth-child(2){height:55%}.sbar:nth-child(3){height:78%}.sbar:nth-child(4){height:100%}
+.sig-bars.live .sbar{background:var(--green);box-shadow:0 0 6px rgba(0,255,136,.5)}
+.sig-bars.armed .sbar{background:var(--red);box-shadow:0 0 6px rgba(255,32,32,.5)}
+
+/* TICKER */
+.alert-ticker{width:100%;background:rgba(255,32,32,.04);
+  border-top:1px solid rgba(255,32,32,.12);border-bottom:1px solid rgba(255,32,32,.12);
+  padding:7px 20px;display:flex;align-items:center;gap:12px;overflow:hidden;transition:all .4s;z-index:10;position:relative}
+.alert-ticker.armed{background:rgba(255,32,32,.14);
+  border-color:rgba(255,32,32,.6);animation:pulse .65s step-end infinite}
+.ap{width:8px;height:8px;border-radius:50%;background:var(--red-dim);flex-shrink:0;animation:blink 1s step-end infinite}
+.ap.active{background:var(--red);box-shadow:0 0 10px var(--red)}
+.at{font-size:10px;letter-spacing:3px;color:#3a1a1a;text-transform:uppercase;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .4s}
+.at.active{color:#ff7777}
+.al{font-size:10px;letter-spacing:2px;color:var(--text-dim);transition:color .4s}
+.al.active{color:var(--red)}
+
+/* HEADER */
+header{width:100%;padding:22px 22px 16px;border-bottom:1px solid var(--border);
+  animation:slideRight .5s ease .3s both;position:relative;z-index:10}
+.cmd-line{font-size:10px;letter-spacing:2px;color:var(--text-dim);margin-bottom:6px}
+h1{font-family:'Orbitron',sans-serif;font-size:clamp(15px,3.5vw,27px);font-weight:900;
+  letter-spacing:5px;text-transform:uppercase;color:var(--green);text-shadow:0 0 20px rgba(0,255,136,.35)}
+h1 em{font-style:normal;font-size:.5em;color:var(--text-dim);display:block;letter-spacing:5px;margin-top:4px}
+
+/* LAYOUT */
+.main{width:100%;max-width:960px;margin:0 auto;padding:16px 16px 60px;
+  display:flex;flex-direction:column;gap:14px;animation:fadeIn .6s ease .4s both;position:relative;z-index:10}
+.row{display:flex;gap:14px;flex-wrap:wrap}
+.col{flex:1;min-width:228px;display:flex;flex-direction:column;gap:14px}
+
+/* PANELS */
+.panel{background:rgba(8,8,15,.88);border:1px solid var(--border);
+  padding:18px 20px 16px;position:relative;overflow:hidden;
+  transition:border-color .3s,box-shadow .3s;backdrop-filter:blur(2px)}
+.panel:hover{border-color:var(--border-hot);box-shadow:0 0 20px rgba(0,255,136,.04)}
+.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--green-dim),transparent);opacity:.5}
+.panel.pr::before{background:linear-gradient(90deg,transparent,var(--red),transparent)}
+.panel.pa::before{background:linear-gradient(90deg,transparent,var(--amber),transparent)}
+.ptag{font-size:9px;letter-spacing:4px;color:var(--text-dim);text-transform:uppercase;
+  margin-bottom:16px;margin-top:4px;display:flex;align-items:center;gap:10px}
+.ptag::before{content:'▶';font-size:7px;color:var(--green-dim)}
+.ptag::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* RETICLE */
+.status-wrap{display:flex;align-items:center;gap:20px}
+.ret{flex-shrink:0;width:120px;height:120px;position:relative;display:flex;align-items:center;justify-content:center}
+.rr{position:absolute;border-radius:50%;border:1px solid var(--text-dim);transition:border-color .5s,box-shadow .5s}
+.rr1{width:100%;height:100%;animation:spin 14s linear infinite}
+.rr2{width:68%;height:68%;animation:spinR 8s linear infinite}
+.rr3{width:36%;height:36%;animation:spin 5s linear infinite}
+.rr1::before,.rr1::after{content:'';position:absolute;background:var(--text-dim);transition:background .4s}
+.rr1::before{width:12px;height:1px;top:50%;left:0;transform:translateY(-50%)}
+.rr1::after{width:12px;height:1px;top:50%;right:0;transform:translateY(-50%)}
+.rr2::before,.rr2::after{content:'';position:absolute;background:var(--text-dim);transition:background .4s}
+.rr2::before{width:1px;height:12px;top:0;left:50%;transform:translateX(-50%)}
+.rr2::after{width:1px;height:12px;bottom:0;left:50%;transform:translateX(-50%)}
+.radar-arm{position:absolute;width:50%;height:2px;top:50%;left:50%;
+  transform-origin:left center;
+  background:linear-gradient(to right,transparent,rgba(0,255,136,.55));
+  animation:radarSweep 3s linear infinite;opacity:.5;transition:opacity .4s,background .4s}
+.rcore{width:28px;height:28px;border-radius:50%;border:2px solid var(--text-dim);
+  background:rgba(0,0,0,.7);position:relative;z-index:1;display:flex;align-items:center;justify-content:center;
+  transition:all .5s}
+.rcore::after{content:'';width:10px;height:10px;border-radius:50%;background:var(--text-dim);transition:all .5s}
+.ret.armed .rr1,.ret.armed .rr2,.ret.armed .rr3{border-color:var(--red)}
+.ret.armed .rr1::before,.ret.armed .rr1::after,.ret.armed .rr2::before,.ret.armed .rr2::after{background:var(--red)}
+.ret.armed .radar-arm{background:linear-gradient(to right,transparent,rgba(255,32,32,.8));animation-duration:.8s;opacity:1}
+.ret.armed .rcore{border-color:var(--red);background:rgba(255,32,32,.15);animation:rPulse .8s ease-in-out infinite}
+.ret.armed .rcore::after{background:var(--red);box-shadow:0 0 14px var(--red)}
+.ret.defused .rr1,.ret.defused .rr2,.ret.defused .rr3{border-color:var(--green)}
+.ret.defused .rcore{border-color:var(--green);background:rgba(0,255,136,.1);box-shadow:0 0 18px rgba(0,255,136,.4)}
+.ret.defused .rcore::after{background:var(--green);box-shadow:0 0 12px var(--green)}
+.s-text{flex:1}
+.s-label{font-size:9px;letter-spacing:3px;color:var(--text-dim);margin-bottom:6px}
+.s-code{font-family:'Orbitron',sans-serif;font-size:27px;font-weight:700;letter-spacing:5px;
+  color:var(--text-dim);transition:color .4s,text-shadow .4s}
+.s-code.armed{color:var(--red);text-shadow:0 0 22px var(--red);animation:blink .65s step-end infinite}
+.s-code.defused{color:var(--green);text-shadow:0 0 22px var(--green)}
+.s-detail{font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-top:8px;line-height:1.7}
+
+/* LEDs */
+.led-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.led-item{display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:2px;color:var(--text-dim)}
+.led{width:10px;height:10px;border-radius:50%;border:1px solid;transition:all .3s}
+.led.g{border-color:var(--green-dim);background:#001a0a}
+.led.r{border-color:var(--red-dim);background:#1a0000}
+.led.a{border-color:var(--amber-dim);background:#1a0a00}
+.led.g.lit{background:var(--green);border-color:var(--green);animation:gPulse 1.5s ease-in-out infinite}
+.led.r.lit{background:var(--red);border-color:var(--red);animation:rPulse .7s ease-in-out infinite}
+.led.a.lit{background:var(--amber);border-color:var(--amber);animation:aPulse 1.2s ease-in-out infinite}
+
+/* THREAT BARS */
+.threat-bars{display:flex;flex-direction:column;gap:10px}
+.tbrow{display:flex;align-items:center;gap:10px}
+.tblabel{font-size:9px;letter-spacing:2px;color:var(--text-dim);width:60px;flex-shrink:0}
+.tbtrack{flex:1;height:6px;background:var(--bg3);border:1px solid var(--border);border-radius:1px;overflow:hidden}
+.tbfill{height:100%;border-radius:1px;transition:width .85s cubic-bezier(.4,0,.2,1),background .4s,box-shadow .4s}
+.tbpct{font-size:11px;font-family:'Orbitron',sans-serif;width:36px;text-align:right;flex-shrink:0;transition:color .4s}
+
+/* COUNTDOWN */
+.cd-wrap{display:flex;flex-direction:column;align-items:center;padding:16px 0 8px;gap:8px}
+.cd-tag{font-size:9px;letter-spacing:4px;color:var(--text-dim)}
+.cd-val{font-family:'Orbitron',sans-serif;font-size:clamp(34px,6vw,54px);font-weight:700;
+  letter-spacing:6px;color:var(--text-dim);transition:color .4s}
+.cd-val.armed{animation:countBlink .75s ease-in-out infinite}
+.cd-val.safe{color:var(--green);text-shadow:0 0 22px var(--green);animation:greenGlow 2s ease-in-out infinite}
+.cd-sub{font-size:9px;letter-spacing:3px;color:var(--text-dim)}
+
+/* BIG BUTTONS */
+.ctrl-section{display:flex;flex-direction:column;gap:12px}
+.bbtn{width:100%;padding:20px 0;position:relative;overflow:hidden;
+  font-family:'Orbitron',sans-serif;font-size:14px;font-weight:700;
+  letter-spacing:6px;text-transform:uppercase;border:2px solid;
+  background:var(--bg3);cursor:pointer;transition:all .22s;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
+.bbtn::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .2s}
+.bbtn::after{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent);transition:left .45s}
+.bbtn:hover::after{left:100%}
+.bbtn:hover::before{opacity:1}
+.bbtn:active{transform:scale(.97)}
+.bon{color:var(--red);border-color:var(--red)}
+.bon::before{background:rgba(255,32,32,.09)}
+.bon:hover{box-shadow:0 0 35px rgba(255,32,32,.38),inset 0 0 22px rgba(255,32,32,.06)}
+.bon.active{background:rgba(255,32,32,.13);box-shadow:0 0 45px rgba(255,32,32,.55),inset 0 0 30px rgba(255,32,32,.12)}
+.boff{color:var(--green);border-color:var(--green)}
+.boff::before{background:rgba(0,255,136,.07)}
+.boff:hover{box-shadow:0 0 35px rgba(0,255,136,.32),inset 0 0 22px rgba(0,255,136,.06)}
+.boff.active{background:rgba(0,255,136,.1);box-shadow:0 0 45px rgba(0,255,136,.45),inset 0 0 30px rgba(0,255,136,.08)}
+.bicon{font-size:9px;letter-spacing:3px;display:block;margin-top:4px;font-weight:400;opacity:.6;font-family:'Share Tech Mono',monospace}
+
+/* TOGGLE */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border:1px solid var(--border);background:var(--bg3);cursor:pointer;transition:border-color .3s}
+.toggle-row:hover{border-color:var(--border-hot)}
+.tgl-label{font-size:11px;letter-spacing:2px}
+.tgl-sw{width:58px;height:28px;border-radius:14px;border:1px solid var(--text-dim);
+  background:var(--bg);position:relative;transition:all .3s;cursor:pointer}
+.tgl-sw.on{border-color:var(--red);background:rgba(255,32,32,.1);box-shadow:0 0 16px rgba(255,32,32,.35)}
+.tgl-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
+  background:var(--text-dim);transition:all .3s}
+.tgl-sw.on .tgl-knob{transform:translateX(30px);background:var(--red);box-shadow:0 0 12px var(--red)}
+
+/* NETWORK + LOG */
+.nodes-row{display:flex;justify-content:space-around;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.node{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:2px}
+.ndot{width:8px;height:8px;border-radius:50%;background:#112211;transition:all .4s}
+.ndot.live{background:var(--green);box-shadow:0 0 8px var(--green);animation:gPulse 1.5s ease-in-out infinite}
+.ndot.err{background:var(--red);box-shadow:0 0 8px var(--red)}
+.ndot.amber{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:aPulse 1.2s ease-in-out infinite}
+.sweep-bar{height:2px;background:var(--bg3);border-radius:1px;overflow:hidden}
+.sweep-fill{height:100%;width:0;background:linear-gradient(to right,transparent,var(--green),transparent);animation:sweepBar 3s ease-in-out infinite}
+.console{background:rgba(4,6,4,.95);border:1px solid var(--border);height:150px;overflow-y:auto;padding:10px 12px}
+.console::-webkit-scrollbar{width:3px}
+.console::-webkit-scrollbar-thumb{background:var(--green-dim)}
+.logline{font-size:11px;line-height:2;color:var(--text-dim)}
+.logline .ts{color:var(--green-dim);margin-right:8px}
+.logline.ok{color:var(--green)}.logline.err{color:var(--red)}.logline.warn{color:var(--amber)}
+
+/* METRICS */
+.sys-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sc{background:var(--bg3);border:1px solid var(--border);padding:12px;display:flex;flex-direction:column;gap:4px}
+.sk{font-size:9px;letter-spacing:2px;color:var(--text-dim)}
+.sv{font-family:'Orbitron',sans-serif;font-size:20px;letter-spacing:2px;color:var(--green)}
+
+/* STATUS BADGE */
+.status-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;
+  border:1px solid var(--border);background:var(--bg3);font-size:10px;letter-spacing:3px;margin-top:8px}
+.sb-dot{width:8px;height:8px;border-radius:50%;background:var(--green-dim);animation:gPulse 1.5s ease-in-out infinite}
+.sb-dot.armed{background:var(--red);animation:rPulse .6s ease-in-out infinite}
+
+/* FOOTER */
+footer{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;
+  padding:12px 18px;border-top:1px solid var(--border);
+  font-size:9px;letter-spacing:2px;color:var(--text-dim);margin-top:8px;position:relative;z-index:10}
+
+@media(max-width:600px){
+  .bbtn{font-size:11px;padding:15px 0}
+  .col{min-width:100%}
+  h1{font-size:14px;letter-spacing:3px}
+}
+body.shake{animation:shakeX .5s ease}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<div id="boot">
+  <div class="boot-logo">SEARCH<span> & DESTROY</span></div>
+  <div class="boot-sub">SEARCH AND DESTROY // CLASSIFIED TERMINAL</div>
+  <div class="boot-bar-wrap"><div class="boot-bar-fill"></div></div>
+  <div class="boot-log" id="bootLog">INITIALIZING SECURE SYSTEMS...</div>
+  <div class="boot-warn">⚠ AUTHORIZED PERSONNEL ONLY — CLEARANCE REQUIRED</div>
+</div>
+<div id="flash"></div>
+<canvas id="pCanvas"></canvas>
+
+<!-- EXPLOSION MODAL -->
+<div class="modal-bg" id="mExpl">
+  <div class="mbox">
+    <div class="ripple-ring r"></div>
+    <div class="ripple-ring r"></div>
+    <div class="ripple-ring r"></div>
+    <div class="m-icon-expl">💥</div>
+    <div class="m-title-expl">⚠ BOMB ACTIVATED ⚠</div>
+    <div class="m-sub-expl">SIGNAL ARMED — LED NODE BROADCASTING<br>DANGER LEVEL: CRITICAL — EVACUATE AREA</div>
+    <button class="mbtn r" onclick="closeModal('expl')">ACKNOWLEDGE THREAT</button>
+  </div>
+</div>
+
+<!-- DEFUSE MODAL -->
+<div class="modal-bg" id="mDef">
+  <div class="mbox">
+    <div class="ripple-ring g"></div>
+    <div class="ripple-ring g"></div>
+    <div class="m-icon-def">✅</div>
+    <div class="m-title-def">SUCCESSFULLY DEFUSED</div>
+    <div class="m-sub-def">ALL CLEAR — LED SIGNAL TERMINATED<br>THREAT NEUTRALIZED — AREA SECURED</div>
+    <button class="mbtn g" onclick="closeModal('def')">CONFIRM SAFE</button>
+  </div>
+</div>
+
+<div class="hz-bar"></div>
+
+<div style="max-width:960px;margin:0 auto;width:100%;position:relative;z-index:10">
+
+  <div class="topbar">
+    <div class="scan-line"></div>
+    <div class="topbar-l">
+      <div class="badge">S&D</div>
+      <div class="brand">Search & Destroy Unit // Remote Detonation Terminal</div>
+    </div>
+    <div class="topbar-r">
+      <div class="sig-bars" id="topSig"><div class="sbar"></div><div class="sbar"></div><div class="sbar"></div><div class="sbar"></div></div>
+      <div class="t-dot" id="topDot"></div>
+      <div class="clk" id="liveClock">00:00:00</div>
+    </div>
+  </div>
+
+  <div class="alert-ticker" id="atick">
+    <div class="ap" id="apip"></div>
+    <div class="at" id="atxt">SYSTEM STATUS: STANDBY — ALL NODES DORMANT — NO ACTIVE THREAT DETECTED</div>
+    <div class="al" id="alvl">THREAT: MINIMAL</div>
+  </div>
+
+  <header>
+    <div class="cmd-line">operator@eod-nexus ~ $ sudo device_control --realtime --classified</div>
+    <h1>SEARCH AND DESTROY // TERMINAL<em>// Supabase Real-Time // ESP32 LED Node // S&D v3.2</em></h1>
+  </header>
+
+  <div class="main">
+
+    <!-- ROW 1 -->
+    <div class="row">
+      <div class="panel" style="flex:2;min-width:280px">
+        <div class="ptag">Node Status</div>
+        <div class="status-wrap">
+          <div class="ret" id="ret">
+            <div class="rr rr1"></div>
+            <div class="rr rr2"></div>
+            <div class="rr rr3"></div>
+            <div class="radar-arm"></div>
+            <div class="rcore"></div>
+          </div>
+          <div class="s-text">
+            <div class="s-label">CURRENT STATE</div>
+            <div class="s-code" id="sCode">STANDBY</div>
+            <div class="s-detail" id="sDet">LED node INACTIVE<br>Awaiting command signal...</div>
+            <div class="status-badge" id="connBadge">
+              <div class="sb-dot" id="sbDot"></div>
+              <span id="connTxt">CONNECTING...</span>
+            </div>
+          </div>
+        </div>
+        <div class="led-row">
+          <div class="led-item"><div class="led r" id="lPwr"></div>POWER</div>
+          <div class="led-item"><div class="led a" id="lSig"></div>SIGNAL</div>
+          <div class="led-item"><div class="led g" id="lNet"></div>NETWORK</div>
+          <div class="led-item"><div class="led r" id="lArm"></div>ARMED</div>
+          <div class="led-item"><div class="led g" id="lDef"></div>SAFE</div>
+        </div>
+      </div>
+
+      <div class="panel pr" style="flex:1;min-width:190px">
+        <div class="ptag">Bomb Timer</div>
+        <div class="cd-wrap">
+          <div class="cd-tag" id="cdTag">COUNTDOWN</div>
+          <div class="cd-val" id="cdVal">00:00</div>
+          <div class="cd-sub" id="cdSub">SYSTEM IDLE</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROW 2 -->
+    <div class="row">
+      <div class="col">
+        <div class="panel">
+          <div class="ptag">Threat Analysis</div>
+          <div class="threat-bars">
+            <div class="tbrow"><div class="tblabel">SIGNAL</div><div class="tbtrack"><div class="tbfill" id="tb1" style="width:10%;background:var(--green-dim)"></div></div><div class="tbpct" id="tp1" style="color:var(--text-dim)">10%</div></div>
+            <div class="tbrow"><div class="tblabel">POWER</div><div class="tbtrack"><div class="tbfill" id="tb2" style="width:10%;background:var(--green-dim)"></div></div><div class="tbpct" id="tp2" style="color:var(--text-dim)">10%</div></div>
+            <div class="tbrow"><div class="tblabel">THREAT</div><div class="tbtrack"><div class="tbfill" id="tb3" style="width:8%;background:var(--green-dim)"></div></div><div class="tbpct" id="tp3" style="color:var(--text-dim)">8%</div></div>
+            <div class="tbrow"><div class="tblabel">DANGER</div><div class="tbtrack"><div class="tbfill" id="tb4" style="width:5%;background:var(--green-dim)"></div></div><div class="tbpct" id="tp4" style="color:var(--text-dim)">5%</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="ptag">Session Metrics</div>
+          <div class="sys-grid">
+            <div class="sc"><span class="sk">Polls</span><span class="sv" id="stPoll">000</span></div>
+            <div class="sc"><span class="sk">Commands</span><span class="sv" id="stCmd">000</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="panel pr">
+          <div class="ptag">Command Interface</div>
+          <div class="ctrl-section">
+            <div class="toggle-row" onclick="handleToggle()">
+              <span class="tgl-label">LED POWER RELAY</span>
+              <div class="tgl-sw" id="tglSw"><div class="tgl-knob"></div></div>
+            </div>
+            <button class="bbtn bon" id="btnOn" onclick="setLed(true)">
+              ⚡ ACTIVATE
+              <span class="bicon">ARM DEVICE — BROADCAST SIGNAL</span>
+            </button>
+            <button class="bbtn boff" id="btnOff" onclick="setLed(false)">
+              ■ DEFUSE
+              <span class="bicon">TERMINATE SIGNAL — SAFE MODE</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NETWORK + LOG -->
+    <div class="row">
+      <div class="panel" style="flex:1;min-width:220px">
+        <div class="ptag">Network Nodes</div>
+        <div class="nodes-row">
+          <div class="node"><div class="ndot" id="ndDB"></div>SUPABASE-DB</div>
+          <div class="node"><div class="ndot live"></div>DASHBOARD</div>
+          <div class="node"><div class="ndot" id="ndSync"></div><span id="ndTxt">OFFLINE</span></div>
+        </div>
+        <div class="sweep-bar"><div class="sweep-fill"></div></div>
+      </div>
+      <div class="panel" style="flex:2;min-width:280px">
+        <div class="ptag">Activity Log</div>
+        <div class="console" id="con">
+          <div class="logline"><span class="ts">[BOOT]</span>EOD-NEXUS terminal initialized</div>
+          <div class="logline"><span class="ts">[INIT]</span>Loading Supabase credentials...</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <span>ESP32 // SUPABASE REALTIME // SEARCH AND DESTROY v3.2</span>
+    <span id="fpoll">POLL: 3000ms | AUTO-REFRESH</span>
+    <span id="fstat">STATUS: INIT</span>
+  </footer>
+</div>
+
+<div class="hz-bar" style="position:fixed;bottom:0;left:0;width:100%;z-index:10"></div>
+
+<script>
+/* ═══════════════════════
+   CONFIG — same as v1
+═══════════════════════ */
+const SUPABASE_URL = "https://dcptcsrznhhcokvywwoe.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjcHRjc3J6bmhoY29rdnl3d29lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NDUwMzIsImV4cCI6MjA5MTIyMTAzMn0.b7HDKYwkczdTn7_ZC229Jt-CaundUrWEx8gaCieVzjE";
+const TABLE = "device_control";
+const ROW_ID = 1;
+const POLL_MS = 3000;
+
+/* ═══════════════════════
+   COUNTDOWN CONFIG
+   Change BOMB_SECONDS to set how long the countdown is
+═══════════════════════ */
+const BOMB_SECONDS = 3 * 60; // 3 minutes — change as needed
+
+/* ═══════════════════════
+   STATE
+═══════════════════════ */
+let curState = false;
+let isUpdating = false;
+let pollCount = 0;
+let cmdCount = 0;
+let startTime = Date.now();
+let prevState = null;
+
+// Countdown state
+let countdownRemaining = BOMB_SECONDS;
+let countdownInterval = null;
+let bombDetonated = false;
+
+/* ═══════════════════════
+   HEADERS — same pattern as v1
+═══════════════════════ */
+function hdrs() {
+  return {
+    "apikey":        SUPABASE_KEY,
+    "Authorization": `Bearer ${SUPABASE_KEY}`,
+    "Content-Type":  "application/json",
+    "Prefer":        "return=minimal"
+  };
+}
+
+/* ═══════════════════════
+   CLOCK
+═══════════════════════ */
+setInterval(() => {
+  document.getElementById('liveClock').textContent =
+    new Date().toLocaleTimeString('en-US', { hour12: false });
+}, 1000);
+
+// Stats update (polls/cmds only, countdown handled separately)
+setInterval(() => {
+  document.getElementById('stPoll').textContent = String(pollCount).padStart(3,'0');
+  document.getElementById('stCmd').textContent  = String(cmdCount).padStart(3,'0');
+}, 1000);
+
+/* ═══════════════════════
+   COUNTDOWN FUNCTIONS
+═══════════════════════ */
+function startCountdown() {
+  if (countdownInterval) return; // already running
+  bombDetonated = false;
+  countdownRemaining = BOMB_SECONDS;
+  document.getElementById('cdTag').textContent = 'COUNTDOWN';
+  countdownInterval = setInterval(() => {
+    if (!curState) {
+      // If defused mid-countdown, stop
+      stopCountdown(false);
+      return;
+    }
+    countdownRemaining--;
+    updateCountdownDisplay();
+    if (countdownRemaining <= 0) {
+      stopCountdown(true);
+      triggerDetonation();
+    }
+  }, 1000);
+  updateCountdownDisplay();
+}
+
+function stopCountdown(detonated) {
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+  if (!detonated) {
+    // Reset display when defused
+    countdownRemaining = BOMB_SECONDS;
+    const cv = document.getElementById('cdVal');
+    cv.className = 'cd-val safe';
+    cv.textContent = '00:00';
+    document.getElementById('cdSub').textContent = 'DEFUSED — ALL CLEAR';
+    document.getElementById('cdTag').textContent = 'COUNTDOWN';
+    setTimeout(() => {
+      if (!curState) {
+        cv.className = 'cd-val';
+        cv.textContent = '00:00';
+        document.getElementById('cdSub').textContent = 'SYSTEM IDLE';
+      }
+    }, 3000);
+  }
+}
+
+function updateCountdownDisplay() {
+  const m = Math.floor(countdownRemaining / 60);
+  const s = countdownRemaining % 60;
+  const cv = document.getElementById('cdVal');
+  cv.textContent = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  // Last 30s danger flash
+  if (countdownRemaining <= 30) {
+    cv.className = 'cd-val armed';
+    document.getElementById('cdSub').textContent = '⚠ DETONATION IMMINENT';
+  } else if (countdownRemaining <= 60) {
+    cv.className = 'cd-val armed';
+    document.getElementById('cdSub').textContent = 'CRITICAL — 1 MIN REMAINING';
+  } else {
+    cv.className = 'cd-val armed';
+    document.getElementById('cdSub').textContent = 'BOMB IS LIVE — COUNTING DOWN';
+  }
+}
+
+function triggerDetonation() {
+  bombDetonated = true;
+  // Force setLed(false) to the DB so ESP32 turns off, then show BOOM modal
+  log('⚠ COUNTDOWN REACHED ZERO — AUTO-DETONATING', 'err');
+  // Show the explosion modal with detonation message
+  document.getElementById('mExpl').classList.add('show');
+  document.querySelector('.m-title-expl').textContent = '💥 DETONATED 💥';
+  document.querySelector('.m-sub-expl').innerHTML = 'COUNTDOWN REACHED ZERO<br>BOMB HAS DETONATED — MISSION FAILED';
+  triggerArmed(); // visual fx
+  // Auto-send defuse command to turn off ESP32
+  setTimeout(() => setLed(false), 1500);
+}
+
+/* ═══════════════════════
+   BOOT MESSAGES
+═══════════════════════ */
+const bootSeqs = [
+  'LOADING SECURE KERNEL...',
+  'ARMING SUBSYSTEMS...',
+  'CALIBRATING NODE...',
+  'ESTABLISHING SUPABASE LINK...',
+  'VERIFYING CREDENTIALS...',
+  'ALL SYSTEMS NOMINAL.'
+];
+let bi = 0;
+const bseq = setInterval(() => {
+  document.getElementById('bootLog').textContent = bootSeqs[bi] || 'READY.';
+  bi++;
+  if (bi >= bootSeqs.length + 1) {
+    clearInterval(bseq);
+    setTimeout(() => {
+      document.getElementById('boot').classList.add('gone');
+      log('EOD-NEXUS boot complete', 'ok');
+      log('Connecting to Supabase...', 'warn');
+      init();
+    }, 400);
+  }
+}, 330);
+
+/* ═══════════════════════
+   LOGGER
+═══════════════════════ */
+function ts() { return new Date().toLocaleTimeString('en-US', { hour12: false }); }
+function log(msg, type = '') {
+  const con = document.getElementById('con');
+  const el = document.createElement('div');
+  el.className = 'logline ' + type;
+  el.innerHTML = `<span class="ts">[${ts()}]</span>${msg}`;
+  con.appendChild(el);
+  con.scrollTop = con.scrollHeight;
+  while (con.children.length > 45) con.removeChild(con.firstChild);
+}
+
+/* ═══════════════════════
+   FETCH STATUS — mirrors v1 fetchStatus()
+═══════════════════════ */
+async function fetchStatus() {
+  document.getElementById('ndSync').className = 'ndot amber';
+  document.getElementById('ndTxt').textContent = 'POLLING...';
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}&select=led_status`,
+      { headers: hdrs() }
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const newState = d[0]?.led_status ?? false;
+    pollCount++;
+
+    // Only trigger animation effects on state change (not on every poll)
+    const stateChanged = (prevState !== null && newState !== prevState);
+    applyState(newState, stateChanged);
+    prevState = newState;
+
+    document.getElementById('ndDB').className   = 'ndot live';
+    document.getElementById('ndSync').className = 'ndot live';
+    document.getElementById('ndTxt').textContent = `SYNCED ${ts()}`;
+    document.getElementById('lNet').classList.add('lit');
+
+    // Update connection badge
+    document.getElementById('connTxt').textContent = 'CONNECTED';
+    document.getElementById('sbDot').className = 'sb-dot';
+    document.getElementById('topSig').classList.add('live');
+    document.getElementById('fstat').textContent = `STATUS: ${newState ? 'ARMED' : 'SAFE'}`;
+
+  } catch(e) {
+    document.getElementById('ndDB').className   = 'ndot err';
+    document.getElementById('ndSync').className = 'ndot err';
+    document.getElementById('ndTxt').textContent = 'LINK FAILURE';
+    document.getElementById('connTxt').textContent = 'CONN. ERROR';
+    log(`FETCH FAILED: ${e.message}`, 'err');
+  }
+}
+
+/* ═══════════════════════
+   SET LED — mirrors v1 setLed()
+   No isConnected gate — works immediately like v1
+═══════════════════════ */
+async function setLed(val) {
+  if (isUpdating) return;
+  isUpdating = true;
+  const prev = curState;
+
+  log(`CMD → led_status = ${val ? 'TRUE' : 'FALSE'}`, 'warn');
+
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}`,
+      { method: 'PATCH', headers: hdrs(), body: JSON.stringify({ led_status: val }) }
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    cmdCount++;
+    applyState(val, true); // always show fx on manual command
+    prevState = val;
+    log(`ACK → LED ${val ? 'ACTIVATED 💥' : 'DEFUSED ✅'}`, val ? 'err' : 'ok');
+  } catch(e) {
+    log(`CMD FAILED: ${e.message}`, 'err');
+  } finally {
+    isUpdating = false;
+  }
+}
+
+function handleToggle() { setLed(!curState); }
+
+/* ═══════════════════════
+   APPLY STATE — full UI update
+═══════════════════════ */
+function applyState(val, withFx) {
+  curState = val;
+
+  document.getElementById('btnOn').classList.toggle('active', val);
+  document.getElementById('btnOff').classList.toggle('active', !val);
+  document.getElementById('tglSw').classList.toggle('on', val);
+
+  const ret = document.getElementById('ret');
+  ret.className = 'ret ' + (val ? 'armed' : 'defused');
+
+  const sc = document.getElementById('sCode');
+  sc.textContent = val ? 'ARMED' : 'DEFUSED';
+  sc.className = 's-code ' + (val ? 'armed' : 'defused');
+
+  document.getElementById('sDet').innerHTML = val
+    ? 'LED node is <b style="color:var(--red)">ACTIVE</b><br>⚠ Signal broadcasting — DANGER!'
+    : 'LED node is <b style="color:var(--green)">INACTIVE</b><br>✓ Signal terminated — ALL CLEAR.';
+
+  const cv = document.getElementById('cdVal');
+  cv.className = 'cd-val ' + (val ? 'armed' : 'safe');
+  document.getElementById('cdSub').textContent = val ? 'BOMB IS LIVE — COUNTING DOWN' : 'DEFUSED — ALL CLEAR';
+
+  // Start or stop countdown
+  if (val && !countdownInterval) {
+    startCountdown();
+  } else if (!val && countdownInterval) {
+    stopCountdown(false);
+  }
+
+  // LEDs
+  document.getElementById('lPwr').classList.toggle('lit', val);
+  document.getElementById('lSig').classList.toggle('lit', val);
+  document.getElementById('lArm').classList.toggle('lit', val);
+  document.getElementById('lDef').classList.toggle('lit', !val);
+
+  // Threat bars
+  if (val) {
+    setTB('tb1','tp1',92,'var(--red)');
+    setTB('tb2','tp2',88,'var(--red)');
+    setTB('tb3','tp3',96,'var(--red)');
+    setTB('tb4','tp4',79,'var(--amber)');
+  } else {
+    setTB('tb1','tp1',10,'var(--green-dim)');
+    setTB('tb2','tp2',10,'var(--green-dim)');
+    setTB('tb3','tp3',8,'var(--green-dim)');
+    setTB('tb4','tp4',5,'var(--green-dim)');
+  }
+
+  // Alert ticker
+  const at   = document.getElementById('atick');
+  const apip = document.getElementById('apip');
+  const atxt = document.getElementById('atxt');
+  const al   = document.getElementById('alvl');
+  const td   = document.getElementById('topDot');
+  const tsi  = document.getElementById('topSig');
+
+  if (val) {
+    at.classList.add('armed');
+    apip.classList.add('active');
+    atxt.classList.add('active');
+    al.classList.add('active');
+    atxt.textContent = '⚠ ALERT — DEVICE ARMED — LED NODE BROADCASTING — DANGER STATE ACTIVE — EVACUATE AREA';
+    al.textContent   = 'THREAT: CRITICAL';
+    td.className     = 't-dot armed';
+    tsi.className    = 'sig-bars armed';
+    document.getElementById('sbDot').classList.add('armed');
+    document.getElementById('fstat').textContent = 'STATUS: ARMED';
+  } else {
+    at.classList.remove('armed');
+    apip.classList.remove('active');
+    atxt.classList.remove('active');
+    al.classList.remove('active');
+    atxt.textContent = 'SYSTEM STATUS: STANDBY — LED INACTIVE — ALL CLEAR — NO ACTIVE THREAT';
+    al.textContent   = 'THREAT: MINIMAL';
+    td.className     = 't-dot';
+    tsi.className    = 'sig-bars live';
+    document.getElementById('sbDot').classList.remove('armed');
+    document.getElementById('fstat').textContent = 'STATUS: SAFE';
+  }
+
+  // Background + effects
+  if (withFx) {
+    if (val) triggerArmed();
+    else     triggerDefuse();
+  } else {
+    if (val) setBgArmed();
+    else     setBgSafe();
+  }
+}
+
+function setTB(bid, pid, v, c) {
+  const b = document.getElementById(bid);
+  const p = document.getElementById(pid);
+  b.style.width      = v + '%';
+  b.style.background = c;
+  b.style.boxShadow  = v > 50 ? `0 0 8px ${c}` : 'none';
+  p.textContent      = v + '%';
+  p.style.color      = c;
+}
+
+/* ═══════════════════════
+   EXPLOSION / DEFUSE FX
+═══════════════════════ */
+function triggerArmed() {
+  setBgArmed();
+  document.body.classList.remove('shake');
+  void document.body.offsetWidth;
+  document.body.classList.add('shake');
+  setTimeout(() => document.body.classList.remove('shake'), 600);
+  const fl = document.getElementById('flash');
+  fl.className = ''; void fl.offsetWidth; fl.className = 'expl';
+  launchParticles('expl');
+  setTimeout(() => document.getElementById('mExpl').classList.add('show'), 450);
+}
+
+function triggerDefuse() {
+  setBgSafe();
+  const fl = document.getElementById('flash');
+  fl.className = ''; void fl.offsetWidth; fl.className = 'def';
+  launchParticles('def');
+  setTimeout(() => document.getElementById('mDef').classList.add('show'), 300);
+}
+
+function closeModal(t) {
+  document.getElementById(t === 'expl' ? 'mExpl' : 'mDef').classList.remove('show');
+}
+document.getElementById('mExpl').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal('expl');
+});
+document.getElementById('mDef').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal('def');
+});
+
+/* ═══════════════════════
+   INIT — auto-connect like v1
+═══════════════════════ */
+async function init() {
+  log('Handshake with Supabase endpoint...');
+  // Keep background always alive with green particles
+  setInterval(() => { if (!curState) spawnDefuse(); }, 4000);
+  spawnDefuse();
+  await fetchStatus();
+  log('Secure connection established. Polling active.', 'ok');
+  setInterval(fetchStatus, POLL_MS);
+}
+
+/* ═══════════════════════════════════════
+   BACKGROUND ANIMATION ENGINE (unchanged)
+═══════════════════════════════════════ */
+const bgC = document.getElementById('bgCanvas');
+const bgX = bgC.getContext('2d');
+let bgW, bgH;
+function resizeBg(){bgW=bgC.width=window.innerWidth;bgH=bgC.height=window.innerHeight;}
+resizeBg(); window.addEventListener('resize',resizeBg);
+
+let bgMode='idle';
+let armedIntensity=0;
+let bgTransitionTarget=0;
+
+const bgParticles=[];const BG_COUNT=80;
+function createBgParticle(){return{x:Math.random()*bgW,y:Math.random()*bgH,vx:(Math.random()-.5)*.4,vy:(Math.random()-.5)*.4,r:Math.random()*1.5+.3,alpha:Math.random()*.5+.1,pulse:Math.random()*Math.PI*2,pulseSpeed:.01+Math.random()*.02};}
+for(let i=0;i<BG_COUNT;i++)bgParticles.push(createBgParticle());
+
+const circuits=[];
+function genCircuits(){circuits.length=0;const count=Math.floor(bgW/60);for(let i=0;i<count;i++){const x=Math.random()*bgW;const segments=[];let cx=x,cy=Math.random()*bgH,dir=Math.random()>.5?1:-1;for(let s=0;s<6+Math.floor(Math.random()*6);s++){const len=30+Math.random()*80;const turn=Math.random()>.5;if(turn){cy+=len*dir;dir=Math.random()>.5?1:-1;}else{cx+=len*(Math.random()>.5?1:-1);}segments.push({x:cx,y:cy});}circuits.push({x,y:segments[0]?.y||0,segs:segments,alpha:.04+Math.random()*.08,phase:Math.random()*Math.PI*2,speed:.008+Math.random()*.015,active:0});}}
+genCircuits(); window.addEventListener('resize',genCircuits);
+
+const hexes=[];
+function genHexes(){hexes.length=0;const R=55,dx=R*Math.sqrt(3),dy=R*1.5;for(let row=-1;row<bgH/dy+2;row++){for(let col=-1;col<bgW/dx+2;col++){const x=col*dx+(row%2===0?0:dx/2),y=row*dy;hexes.push({x,y,r:R,alpha:.04,phase:Math.random()*Math.PI*2,speed:.005+Math.random()*.01});}}}
+genHexes();
+
+const scanBeams=[{y:bgH*.25,speed:.18,alpha:.06},{y:bgH*.7,speed:-.14,alpha:.05}];
+const embers=[];const defParts=[];
+
+function spawnEmbers(){for(let i=0;i<140;i++){const a=Math.random()*Math.PI*2,sp=2+Math.random()*12;embers.push({x:bgW/2,y:bgH/2,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-Math.random()*5,r:1.5+Math.random()*4,life:0,maxLife:60+Math.random()*60,color:`hsl(${Math.random()*40+10},100%,${55+Math.random()*30}%)`,gravity:.15});}}
+function spawnDefuse(){for(let i=0;i<80;i++){const a=Math.random()*Math.PI*2,sp=1+Math.random()*7;defParts.push({x:bgW*.5+bgW*.3*(Math.random()-.5),y:bgH*.5+bgH*.3*(Math.random()-.5),vx:Math.cos(a)*sp*.5,vy:Math.sin(a)*sp*.5-1,r:1+Math.random()*3,life:0,maxLife:50+Math.random()*70,color:`hsl(${130+Math.random()*40},100%,${55+Math.random()*30}%)`});}}
+
+let bgFrame=0;
+function drawBg(){
+  bgX.clearRect(0,0,bgW,bgH);bgFrame++;
+  const armed=armedIntensity;const safe=1-armed;
+  hexes.forEach(h=>{h.phase+=h.speed;const a=(Math.sin(h.phase)+1)*.5;const baseA=armed>.5?(a*.08*armed+.02)*(Math.random()>.97?3:1):a*.06*safe+.02;const col=armed>.3?`rgba(255,${Math.floor(32+armed*80)},0,${baseA})`:`rgba(0,255,136,${baseA})`;bgX.beginPath();for(let i=0;i<6;i++){const ang=Math.PI/180*60*i-Math.PI/6;i===0?bgX.moveTo(h.x+h.r*Math.cos(ang),h.y+h.r*Math.sin(ang)):bgX.lineTo(h.x+h.r*Math.cos(ang),h.y+h.r*Math.sin(ang));}bgX.closePath();bgX.strokeStyle=col;bgX.lineWidth=.5;bgX.stroke();});
+  circuits.forEach(c=>{c.phase+=c.speed;c.active=(Math.sin(c.phase)+1)*.5;const baseA=c.alpha*c.active;const col=armed>.4?`rgba(255,${Math.floor(60+armed*130)},0,${baseA*(1+armed*.5)})`:`rgba(0,255,136,${baseA})`;bgX.beginPath();bgX.moveTo(c.x,c.y);c.segs.forEach(s=>bgX.lineTo(s.x,s.y));bgX.strokeStyle=col;bgX.lineWidth=.8;bgX.stroke();c.segs.forEach((s,i)=>{if(i%2===0){bgX.beginPath();bgX.arc(s.x,s.y,1.5,0,Math.PI*2);bgX.fillStyle=col;bgX.fill();}});});
+  bgParticles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.pulse+=p.pulseSpeed;if(p.x<0)p.x=bgW;if(p.x>bgW)p.x=0;if(p.y<0)p.y=bgH;if(p.y>bgH)p.y=0;const a=((Math.sin(p.pulse)+1)*.5)*p.alpha;bgX.beginPath();bgX.arc(p.x,p.y,p.r,0,Math.PI*2);bgX.fillStyle=armed>.4?`rgba(255,${Math.floor(60+armed*100)},0,${a*(1+armed)})`:`rgba(0,255,136,${a})`;bgX.fill();});
+  scanBeams.forEach(b=>{b.y+=b.speed*(1+armed*2);if(b.y<0)b.y=bgH;if(b.y>bgH)b.y=0;const grad=bgX.createLinearGradient(0,b.y-8,0,b.y+8);const c1=armed>.4?`rgba(255,80,0,${b.alpha*(1+armed)})`:`rgba(0,255,136,${b.alpha})`;grad.addColorStop(0,'transparent');grad.addColorStop(.5,c1);grad.addColorStop(1,'transparent');bgX.fillStyle=grad;bgX.fillRect(0,b.y-8,bgW,16);});
+  if(armed>.05){for(let i=0;i<3;i++){const t=((bgFrame*.012+i/3)%1),maxR=Math.min(bgW,bgH)*.65,r=t*maxR,a=armed*(1-t)*.12;bgX.beginPath();bgX.arc(bgW/2,bgH/2,r,0,Math.PI*2);bgX.strokeStyle=`rgba(255,${Math.floor(32+armed*60)},0,${a})`;bgX.lineWidth=2;bgX.stroke();}const cg=bgX.createRadialGradient(bgW/2,bgH/2,0,bgW/2,bgH/2,180*armed);cg.addColorStop(0,`rgba(255,80,0,${.06*armed})`);cg.addColorStop(1,'rgba(255,0,0,0)');bgX.fillStyle=cg;bgX.fillRect(0,0,bgW,bgH);}
+  if(safe>.3&&bgMode==='idle'){const sg=bgX.createRadialGradient(bgW/2,bgH/2,0,bgW/2,bgH/2,200*safe);sg.addColorStop(0,`rgba(0,255,136,${.03*safe})`);sg.addColorStop(1,'rgba(0,255,136,0)');bgX.fillStyle=sg;bgX.fillRect(0,0,bgW,bgH);}
+  for(let i=embers.length-1;i>=0;i--){const e=embers[i];e.x+=e.vx;e.y+=e.vy;e.vy+=e.gravity;e.vx*=.97;e.life++;const prog=e.life/e.maxLife,a=1-prog;bgX.save();bgX.globalAlpha=a;bgX.fillStyle=e.color;bgX.shadowColor=e.color;bgX.shadowBlur=8;bgX.beginPath();bgX.arc(e.x,e.y,e.r*(1-prog*.5),0,Math.PI*2);bgX.fill();bgX.restore();if(e.life>=e.maxLife)embers.splice(i,1);}
+  for(let i=defParts.length-1;i>=0;i--){const p=defParts[i];p.x+=p.vx;p.y+=p.vy;p.vy-=.05;p.life++;const prog=p.life/p.maxLife,a=1-prog;bgX.save();bgX.globalAlpha=a;bgX.fillStyle=p.color;bgX.shadowColor=p.color;bgX.shadowBlur=10;bgX.beginPath();bgX.arc(p.x,p.y,p.r*(1-prog*.6),0,Math.PI*2);bgX.fill();bgX.restore();if(p.life>=p.maxLife)defParts.splice(i,1);}
+  const speed=.015;
+  if(armedIntensity<bgTransitionTarget)armedIntensity=Math.min(bgTransitionTarget,armedIntensity+speed);
+  if(armedIntensity>bgTransitionTarget)armedIntensity=Math.max(bgTransitionTarget,armedIntensity-speed);
+  requestAnimationFrame(drawBg);
+}
+requestAnimationFrame(drawBg);
+
+function setBgArmed(){bgMode='armed';bgTransitionTarget=0;spawnEmbers();setTimeout(spawnEmbers,400);}
+function setBgSafe(){bgMode='idle';bgTransitionTarget=0;spawnDefuse();setTimeout(spawnDefuse,300);}
+
+/* ═══════════════════════
+   FOREGROUND PARTICLES
+═══════════════════════ */
+function launchParticles(type){
+  const cv=document.getElementById('pCanvas');
+  const ctx=cv.getContext('2d');
+  cv.width=window.innerWidth;cv.height=window.innerHeight;
+  const cx=cv.width/2,cy=cv.height/2;
+  const cols=type==='expl'?['#ff4400','#ff8800','#ffcc00','#ff2020','#ffffff','#ffaa00']:['#00ff88','#00ffcc','#aaffcc','#00dd66','#ffffff','#00ffaa'];
+  const count=type==='expl'?160:80;
+  const parts=[];
+  for(let i=0;i<count;i++){const a=Math.random()*Math.PI*2,sp=type==='expl'?3+Math.random()*16:2+Math.random()*9;parts.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-(type==='expl'?Math.random()*7:Math.random()*4),r:2+Math.random()*(type==='expl'?7:5),color:cols[Math.floor(Math.random()*cols.length)],alpha:1,gravity:type==='expl'?.2:.08,life:0,maxLife:50+Math.random()*60});}
+  function draw(){ctx.clearRect(0,0,cv.width,cv.height);let alive=false;parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=p.gravity;p.vx*=.97;p.life++;p.alpha=Math.max(0,1-p.life/p.maxLife);if(p.alpha>0)alive=true;ctx.save();ctx.globalAlpha=p.alpha;ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=type==='expl'?14:10;ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.alpha,0,Math.PI*2);ctx.fill();ctx.restore();});alive?requestAnimationFrame(draw):ctx.clearRect(0,0,cv.width,cv.height);}
+  requestAnimationFrame(draw);
+}
+</script>
+</body>
+</html>
