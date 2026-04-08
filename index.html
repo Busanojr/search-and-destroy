@@ -454,6 +454,14 @@ body.shake{animation:shakeX .5s ease}
       </div>
     </div>
 
+    <!-- CHARACTER ANIMATION ROW -->
+    <div class="row">
+      <div class="panel" style="flex:1;min-width:100%;padding:10px 20px 14px;">
+        <div class="ptag">Operative Status</div>
+        <canvas id="charCanvas" width="900" height="140" style="width:100%;height:140px;display:block;"></canvas>
+      </div>
+    </div>
+
     <!-- ROW 2 -->
     <div class="row">
       <div class="col">
@@ -541,7 +549,7 @@ const POLL_MS = 3000;
    COUNTDOWN CONFIG
    Change BOMB_SECONDS to set how long the countdown is
 ═══════════════════════ */
-const BOMB_SECONDS = 3 * 60; // 3 minutes — change as needed
+const BOMB_SECONDS = 30;
 
 /* ═══════════════════════
    STATE
@@ -611,7 +619,7 @@ function startCountdown() {
 function stopCountdown(detonated) {
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
   if (!detonated) {
-    // Reset display when defused
+    // Reset display when manually defused
     countdownRemaining = BOMB_SECONDS;
     const cv = document.getElementById('cdVal');
     cv.className = 'cd-val safe';
@@ -623,8 +631,23 @@ function stopCountdown(detonated) {
         cv.className = 'cd-val';
         cv.textContent = '00:00';
         document.getElementById('cdSub').textContent = 'SYSTEM IDLE';
+        charSetState('idle');
       }
     }, 3000);
+  } else {
+    // Detonated — show 00:00 as danger, reset after a delay
+    countdownRemaining = BOMB_SECONDS;
+    const cv = document.getElementById('cdVal');
+    cv.className = 'cd-val armed';
+    cv.textContent = '00:00';
+    document.getElementById('cdSub').textContent = '💥 BOMB DETONATED';
+    document.getElementById('cdTag').textContent = 'DETONATED';
+    setTimeout(() => {
+      cv.className = 'cd-val';
+      cv.textContent = '00:00';
+      document.getElementById('cdSub').textContent = 'SYSTEM IDLE';
+      document.getElementById('cdTag').textContent = 'COUNTDOWN';
+    }, 5000);
   }
 }
 
@@ -648,15 +671,40 @@ function updateCountdownDisplay() {
 
 function triggerDetonation() {
   bombDetonated = true;
-  // Force setLed(false) to the DB so ESP32 turns off, then show BOOM modal
-  log('⚠ COUNTDOWN REACHED ZERO — AUTO-DETONATING', 'err');
-  // Show the explosion modal with detonation message
-  document.getElementById('mExpl').classList.add('show');
-  document.querySelector('.m-title-expl').textContent = '💥 DETONATED 💥';
-  document.querySelector('.m-sub-expl').innerHTML = 'COUNTDOWN REACHED ZERO<br>BOMB HAS DETONATED — MISSION FAILED';
-  triggerArmed(); // visual fx
-  // Auto-send defuse command to turn off ESP32
-  setTimeout(() => setLed(false), 1500);
+  log('⚠ COUNTDOWN REACHED ZERO — DETONATED', 'err');
+  // Visual FX first
+  charSetState('blown');
+  triggerArmed();
+  // Show the detonation modal
+  setTimeout(() => {
+    document.querySelector('.m-title-expl').textContent = '💥 DETONATED 💥';
+    document.querySelector('.m-sub-expl').innerHTML = 'COUNTDOWN REACHED ZERO<br>BOMB HAS DETONATED — MISSION FAILED';
+    document.getElementById('mExpl').classList.add('show');
+  }, 450);
+  // Silently turn off ESP32 LED in DB without triggering defuse modal/animation
+  setTimeout(async () => {
+    try {
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}`,
+        { method: 'PATCH', headers: hdrs(), body: JSON.stringify({ led_status: false }) }
+      );
+      // Update local state and UI quietly — no FX
+      curState = false;
+      prevState = false;
+      document.getElementById('btnOn').classList.remove('active');
+      document.getElementById('btnOff').classList.add('active');
+      document.getElementById('tglSw').classList.remove('on');
+      document.getElementById('lPwr').classList.remove('lit');
+      document.getElementById('lSig').classList.remove('lit');
+      document.getElementById('lArm').classList.remove('lit');
+      document.getElementById('lDef').classList.add('lit');
+      log('ESP32 LED turned off after detonation', 'warn');
+    } catch(e) {
+      log(`Post-detonation off failed: ${e.message}`, 'err');
+    } finally {
+      bombDetonated = false; // reset for next round
+    }
+  }, 2000);
 }
 
 /* ═══════════════════════
@@ -776,6 +824,10 @@ function handleToggle() { setLed(!curState); }
 function applyState(val, withFx) {
   curState = val;
 
+  // If bomb already detonated and we're just getting the off-state
+  // from polling or the silent DB write — skip all FX
+  const skipFx = (!val && bombDetonated);
+
   document.getElementById('btnOn').classList.toggle('active', val);
   document.getElementById('btnOff').classList.toggle('active', !val);
   document.getElementById('tglSw').classList.toggle('on', val);
@@ -798,8 +850,10 @@ function applyState(val, withFx) {
   // Start or stop countdown
   if (val && !countdownInterval) {
     startCountdown();
+    charSetState('defusing');
   } else if (!val && countdownInterval) {
     stopCountdown(false);
+    // charSetState handled by defuse/detonation triggers
   }
 
   // LEDs
@@ -853,11 +907,11 @@ function applyState(val, withFx) {
     document.getElementById('fstat').textContent = 'STATUS: SAFE';
   }
 
-  // Background + effects
-  if (withFx) {
+  // Background + effects — skip if this is post-detonation state sync
+  if (!skipFx && withFx) {
     if (val) triggerArmed();
     else     triggerDefuse();
-  } else {
+  } else if (!skipFx) {
     if (val) setBgArmed();
     else     setBgSafe();
   }
@@ -890,6 +944,7 @@ function triggerArmed() {
 
 function triggerDefuse() {
   setBgSafe();
+  charSetState('defused');
   const fl = document.getElementById('flash');
   fl.className = ''; void fl.offsetWidth; fl.className = 'def';
   launchParticles('def');
@@ -987,6 +1042,357 @@ function launchParticles(type){
   function draw(){ctx.clearRect(0,0,cv.width,cv.height);let alive=false;parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=p.gravity;p.vx*=.97;p.life++;p.alpha=Math.max(0,1-p.life/p.maxLife);if(p.alpha>0)alive=true;ctx.save();ctx.globalAlpha=p.alpha;ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=type==='expl'?14:10;ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.alpha,0,Math.PI*2);ctx.fill();ctx.restore();});alive?requestAnimationFrame(draw):ctx.clearRect(0,0,cv.width,cv.height);}
   requestAnimationFrame(draw);
 }
+
+/* ═══════════════════════════════════════
+   CHARACTER ANIMATION ENGINE
+═══════════════════════════════════════ */
+const charC = document.getElementById('charCanvas');
+const charX = charC.getContext('2d');
+
+// Character state machine
+// states: idle | defusing | defused | blown | jumping
+let charState = 'idle';
+let charFrame = 0;
+let charX_pos = 0;    // horizontal position
+let charY_pos = 0;    // vertical offset (for jump)
+let charVY = 0;       // vertical velocity (for jump/blown)
+let charVX = 0;       // horizontal velocity (for blown)
+let charRot = 0;      // rotation (for blown)
+let charAlpha = 1;
+let charJumpCount = 0;
+let charAnimFrame = 0;
+
+// Bomb object position
+let bombX = 0;
+const GROUND_Y = 100; // y coordinate of ground
+
+function resizeChar() {
+  charC.width = charC.offsetWidth * window.devicePixelRatio || charC.offsetWidth;
+  charC.height = 140;
+  bombX = charC.width * 0.55;
+}
+resizeChar();
+window.addEventListener('resize', resizeChar);
+
+// Called from applyState / triggerDetonation / triggerDefuse
+function charSetState(st) {
+  charState = st;
+  charFrame = 0;
+  charAnimFrame = 0;
+  if (st === 'defusing') {
+    charX_pos = bombX - 60;
+    charY_pos = 0;
+    charVY = 0; charVX = 0; charRot = 0; charAlpha = 1;
+  }
+  if (st === 'idle') {
+    charX_pos = 60;
+    charY_pos = 0;
+    charVY = 0; charVX = 0; charRot = 0; charAlpha = 1;
+  }
+  if (st === 'defused') {
+    charVY = -14; charVX = 0; charRot = 0; charAlpha = 1;
+    charJumpCount = 0;
+  }
+  if (st === 'blown') {
+    charVY = -18; charVX = -8; charRot = 0; charAlpha = 1;
+  }
+}
+
+function drawChar() {
+  const W = charC.width, H = charC.height;
+  charX.clearRect(0, 0, W, H);
+  charAnimFrame++;
+
+  // --- UPDATE PHYSICS ---
+  if (charState === 'defused') {
+    charY_pos += charVY;
+    charVY += 0.9; // gravity
+    if (charY_pos >= 0) {
+      charY_pos = 0;
+      charVY = 0;
+      charJumpCount++;
+      if (charJumpCount < 4) {
+        // bounce again
+        setTimeout(() => { charVY = -11 - (3 - charJumpCount) * 2; }, 80);
+      } else {
+        charState = 'idle';
+      }
+    }
+  }
+  if (charState === 'blown') {
+    charY_pos += charVY;
+    charX_pos += charVX;
+    charVY += 0.6;
+    charRot += 0.18;
+    charAlpha = Math.max(0, charAlpha - 0.012);
+    if (charY_pos > GROUND_Y + 60 || charX_pos < -80) {
+      // reset off screen
+      charState = 'idle';
+      charX_pos = 60; charY_pos = 0;
+      charRot = 0; charAlpha = 1;
+    }
+  }
+
+  // --- DRAW GROUND LINE ---
+  charX.save();
+  charX.strokeStyle = 'rgba(0,255,136,0.12)';
+  charX.lineWidth = 1;
+  charX.setLineDash([6,8]);
+  charX.beginPath();
+  charX.moveTo(0, GROUND_Y + 1);
+  charX.lineTo(W, GROUND_Y + 1);
+  charX.stroke();
+  charX.setLineDash([]);
+  charX.restore();
+
+  // --- DRAW BOMB ---
+  drawBomb(bombX, GROUND_Y - 18);
+
+  // --- DRAW WIRES TO BOMB when defusing ---
+  if (charState === 'defusing') {
+    const wx = charX_pos + 22;
+    const wy = GROUND_Y - 30;
+    const bwx = bombX - 18;
+    const bwy = GROUND_Y - 20;
+    // Animate wire cut on low time
+    const timeLeft = countdownRemaining / BOMB_SECONDS;
+    const snip = (charAnimFrame % 30 < 15); // hand moves
+    charX.save();
+    charX.strokeStyle = snip ? 'rgba(255,80,0,0.9)' : 'rgba(0,255,136,0.7)';
+    charX.lineWidth = 2;
+    charX.beginPath();
+    charX.moveTo(wx, wy);
+    charX.bezierCurveTo(wx+20, wy-10, bwx-20, bwy-10, bwx, bwy);
+    charX.stroke();
+    // second wire
+    charX.strokeStyle = snip ? 'rgba(0,255,136,0.7)' : 'rgba(255,80,0,0.9)';
+    charX.beginPath();
+    charX.moveTo(wx, wy+6);
+    charX.bezierCurveTo(wx+20, wy+0, bwx-20, bwy+0, bwx, bwy+6);
+    charX.stroke();
+    charX.restore();
+  }
+
+  // --- DRAW CHARACTER ---
+  const cx = charX_pos;
+  const cy = GROUND_Y + charY_pos;
+  charX.save();
+  charX.globalAlpha = charAlpha;
+  charX.translate(cx, cy);
+  charX.rotate(charRot);
+
+  const G = charState === 'defusing' ? 'rgba(0,255,136,1)' :
+            charState === 'defused'  ? 'rgba(0,255,136,1)' :
+            charState === 'blown'    ? 'rgba(255,80,0,1)'  :
+                                       'rgba(0,200,100,0.7)';
+  const GDIM = charState === 'blown' ? 'rgba(255,150,0,0.8)' : 'rgba(0,150,70,0.6)';
+
+  // Body (torso)
+  charX.fillStyle = GDIM;
+  charX.fillRect(-8, -30, 16, 18);
+  // outline
+  charX.strokeStyle = G;
+  charX.lineWidth = 1.5;
+  charX.strokeRect(-8, -30, 16, 18);
+
+  // Head
+  const headBob = charState === 'defusing' ? Math.sin(charAnimFrame * 0.15) * 2 : 0;
+  charX.beginPath();
+  charX.arc(0, -38 + headBob, 7, 0, Math.PI * 2);
+  charX.fillStyle = GDIM;
+  charX.fill();
+  charX.strokeStyle = G;
+  charX.lineWidth = 1.5;
+  charX.stroke();
+
+  // Eyes
+  charX.fillStyle = G;
+  if (charState === 'blown') {
+    // X eyes
+    charX.lineWidth = 1.5;
+    charX.beginPath(); charX.moveTo(-3,-40+headBob); charX.lineTo(-1,-38+headBob); charX.stroke();
+    charX.beginPath(); charX.moveTo(-1,-40+headBob); charX.lineTo(-3,-38+headBob); charX.stroke();
+    charX.beginPath(); charX.moveTo(1,-40+headBob); charX.lineTo(3,-38+headBob); charX.stroke();
+    charX.beginPath(); charX.moveTo(3,-40+headBob); charX.lineTo(1,-38+headBob); charX.stroke();
+  } else if (charState === 'defused') {
+    // Happy ^^ eyes
+    charX.beginPath(); charX.arc(-2.5,-39+headBob,1.5,Math.PI,0); charX.stroke();
+    charX.beginPath(); charX.arc(2.5,-39+headBob,1.5,Math.PI,0); charX.stroke();
+  } else {
+    charX.beginPath(); charX.arc(-2.5,-38.5+headBob,1.2,0,Math.PI*2); charX.fill();
+    charX.beginPath(); charX.arc(2.5,-38.5+headBob,1.2,0,Math.PI*2); charX.fill();
+  }
+
+  // Helmet/hat
+  charX.fillStyle = G;
+  charX.fillRect(-7,-46+headBob,14,5);
+  charX.fillRect(-5,-48+headBob,10,4);
+
+  // Legs
+  const legSwing = charState === 'defusing' ? 0 : Math.sin(charAnimFrame * 0.14) * 6;
+  charX.strokeStyle = G; charX.lineWidth = 3;
+  // left leg
+  charX.beginPath();
+  charX.moveTo(-4,-12);
+  charX.lineTo(-5-legSwing,-12+18);
+  charX.stroke();
+  // right leg
+  charX.beginPath();
+  charX.moveTo(4,-12);
+  charX.lineTo(5+legSwing,-12+18);
+  charX.stroke();
+  // boots
+  charX.fillStyle = GDIM;
+  charX.fillRect(-9-legSwing,4,8,4);
+  charX.fillRect(1+legSwing,4,8,4);
+
+  // Arms
+  let lArmAngle = charState === 'defusing'
+    ? -0.8 + Math.sin(charAnimFrame * 0.25) * 0.3   // reaching forward, hand trembling
+    : charState === 'defused'
+    ? -2.0 + Math.sin(charAnimFrame * 0.4) * 0.5     // arms up celebrating
+    : -0.3 + Math.sin(charAnimFrame * 0.1) * 0.15;
+  let rArmAngle = charState === 'defusing'
+    ? -0.6 + Math.sin(charAnimFrame * 0.3) * 0.3
+    : charState === 'defused'
+    ? -2.2 + Math.sin(charAnimFrame * 0.35) * 0.5
+    : -0.4 + Math.sin(charAnimFrame * 0.12) * 0.15;
+
+  charX.strokeStyle = G; charX.lineWidth = 2.5;
+  // left arm
+  charX.save();
+  charX.translate(-8,-24);
+  charX.rotate(lArmAngle);
+  charX.beginPath(); charX.moveTo(0,0); charX.lineTo(-12,0); charX.stroke();
+  // tool/hand
+  if (charState === 'defusing') {
+    charX.fillStyle = 'rgba(255,220,0,0.9)';
+    charX.fillRect(-16,-2,6,4); // wire cutters
+  }
+  charX.restore();
+  // right arm
+  charX.save();
+  charX.translate(8,-24);
+  charX.rotate(Math.PI - rArmAngle);
+  charX.beginPath(); charX.moveTo(0,0); charX.lineTo(-12,0); charX.stroke();
+  charX.restore();
+
+  charX.restore(); // end character
+
+  // --- LABELS ---
+  charX.save();
+  charX.font = '9px "Share Tech Mono"';
+  charX.letterSpacing = '2px';
+  charX.textAlign = 'center';
+  const lbl = charState === 'idle'     ? 'OPERATIVE: STANDBY' :
+              charState === 'defusing' ? '⚡ DEFUSING...' :
+              charState === 'defused'  ? '✅ DEFUSED!' :
+              charState === 'blown'    ? '💥 KIA' : '';
+  const lblCol = charState === 'defused' ? 'rgba(0,255,136,0.9)' :
+                 charState === 'blown'   ? 'rgba(255,80,0,0.9)'  :
+                 charState === 'defusing'? 'rgba(255,200,0,0.8)' :
+                                          'rgba(0,150,80,0.5)';
+  charX.fillStyle = lblCol;
+  charX.fillText(lbl, cx, GROUND_Y + 20);
+  charX.restore();
+
+  requestAnimationFrame(drawChar);
+}
+requestAnimationFrame(drawChar);
+
+/* ═══════════════════════
+   BOMB SVG DRAW
+═══════════════════════ */
+function drawBomb(bx, by) {
+  const armed = curState;
+  const glow = armed ? `rgba(255,32,32,${0.4 + Math.sin(charAnimFrame*0.1)*0.3})` : 'rgba(0,255,136,0.2)';
+  const bodyCol = armed ? 'rgba(40,0,0,0.95)' : 'rgba(0,20,10,0.9)';
+  const lineCol = armed ? '#ff2020' : '#00ff88';
+  const screenCol = armed ? `rgba(255,${Math.floor(32+Math.sin(charAnimFrame*0.15)*60)},0,0.9)` : 'rgba(0,255,136,0.4)';
+
+  charX.save();
+
+  // Glow halo
+  charX.beginPath();
+  charX.arc(bx, by-6, 28, 0, Math.PI*2);
+  const grd = charX.createRadialGradient(bx,by-6,5,bx,by-6,30);
+  grd.addColorStop(0, glow);
+  grd.addColorStop(1, 'transparent');
+  charX.fillStyle = grd;
+  charX.fill();
+
+  // Body (rounded rect)
+  charX.beginPath();
+  roundRect(charX, bx-22, by-18, 44, 36, 6);
+  charX.fillStyle = bodyCol;
+  charX.fill();
+  charX.strokeStyle = lineCol;
+  charX.lineWidth = 1.5;
+  charX.stroke();
+
+  // Fuse / top connector
+  charX.strokeStyle = lineCol;
+  charX.lineWidth = 2;
+  charX.beginPath();
+  charX.moveTo(bx, by-18);
+  charX.lineTo(bx, by-26);
+  charX.stroke();
+  // Fuse spark when armed
+  if (armed && charAnimFrame % 8 < 4) {
+    charX.fillStyle = 'rgba(255,220,0,0.95)';
+    charX.beginPath();
+    charX.arc(bx, by-27, 3, 0, Math.PI*2);
+    charX.fill();
+  }
+
+  // Screen / display on bomb
+  charX.beginPath();
+  roundRect(charX, bx-14, by-12, 28, 14, 3);
+  charX.fillStyle = screenCol;
+  charX.fill();
+  charX.strokeStyle = lineCol;
+  charX.lineWidth = 0.8;
+  charX.stroke();
+
+  // Display text — countdown
+  charX.font = 'bold 9px "Orbitron"';
+  charX.textAlign = 'center';
+  charX.fillStyle = armed ? '#ff8888' : '#00ff88';
+  const m = Math.floor(countdownRemaining/60), s = countdownRemaining%60;
+  const dispTime = armed
+    ? String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0')
+    : '--:--';
+  charX.fillText(dispTime, bx, by-2);
+
+  // Rivets/bolts on bomb corners
+  [[bx-18,by-14],[bx+18,by-14],[bx-18,by+14],[bx+18,by+14]].forEach(([rx,ry]) => {
+    charX.beginPath(); charX.arc(rx,ry,2,0,Math.PI*2);
+    charX.fillStyle = lineCol; charX.fill();
+  });
+
+  // Label
+  charX.font = '7px "Share Tech Mono"';
+  charX.fillStyle = lineCol;
+  charX.textAlign = 'center';
+  charX.fillText(armed ? '⚠ ARMED' : 'STANDBY', bx, by+22);
+
+  charX.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
 </script>
 </body>
 </html>
